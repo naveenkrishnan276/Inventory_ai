@@ -8,6 +8,32 @@ class HomeSummary(BaseModel):
     stockout_risk_percent: float
     last_refresh: str
     model_version: str
+    inventory_health: list["InventoryHealthRow"]
+    risk_distribution: "RiskDistribution"
+    top_at_risk: list["AtRiskProduct"]
+
+
+class InventoryHealthRow(BaseModel):
+    store_id: str
+    product_id: str
+    current_stock: int
+    predicted_daily_demand: float
+    days_of_cover: float
+    risk_level: str
+
+
+class RiskDistribution(BaseModel):
+    LOW: int
+    MEDIUM: int
+    HIGH: int
+    CRITICAL: int
+
+
+class AtRiskProduct(BaseModel):
+    store_id: str
+    product_id: str
+    days_of_cover: float
+    risk_level: str
 
 
 class DemandPredictionRow(BaseModel):
@@ -40,7 +66,7 @@ class AnalyticsPoint(BaseModel):
     value: float
 
 
-class RiskDistribution(BaseModel):
+class AnalyticsRiskDistribution(BaseModel):
     low: int
     medium: int
     high: int
@@ -51,7 +77,7 @@ class AnalyticsResponse(BaseModel):
     sales_rate: list[AnalyticsPoint]
     demand_rate: list[AnalyticsPoint]
     reorder_rate: list[AnalyticsPoint]
-    risk_distribution: RiskDistribution
+    risk_distribution: AnalyticsRiskDistribution
 
 
 class ReorderRow(BaseModel):
@@ -64,6 +90,10 @@ class ReorderRow(BaseModel):
     action: str
     auto_confirm_eligible: bool
     status: str
+    last_reorder_date: str | None
+    current_stock: int
+    predicted_daily_demand: float
+    days_of_cover: float
 
 
 class ReorderListResponse(BaseModel):

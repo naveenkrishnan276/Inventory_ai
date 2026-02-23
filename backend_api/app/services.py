@@ -107,6 +107,16 @@ def get_home_summary() -> dict:
     at_risk = sum(1 for item in data if item["risk_level"] in {"HIGH", "CRITICAL"})
     stockout_risk_percent = round((at_risk / max(len(data), 1)) * 100, 2)
     today_sales_revenue = round(sum(item["actual_sales"] * 42.0 for item in data), 2)
+    risk_distribution = {
+        "LOW": sum(1 for item in data if item["risk_level"] == "LOW"),
+        "MEDIUM": sum(1 for item in data if item["risk_level"] == "MEDIUM"),
+        "HIGH": sum(1 for item in data if item["risk_level"] == "HIGH"),
+        "CRITICAL": sum(1 for item in data if item["risk_level"] == "CRITICAL"),
+    }
+    top_at_risk = sorted(
+        [item for item in data if item["risk_level"] in {"HIGH", "CRITICAL"}],
+        key=lambda item: item["days_of_cover"],
+    )[:5]
 
     retrain = read_retrain_status()
 
@@ -117,6 +127,27 @@ def get_home_summary() -> dict:
         "stockout_risk_percent": stockout_risk_percent,
         "last_refresh": utc_now_iso(),
         "model_version": retrain.get("model_version", "demand_rf_model_current"),
+        "inventory_health": [
+            {
+                "store_id": item["store_id"],
+                "product_id": item["product_id"],
+                "current_stock": item["current_stock"],
+                "predicted_daily_demand": item["predicted_daily_demand"],
+                "days_of_cover": item["days_of_cover"],
+                "risk_level": item["risk_level"],
+            }
+            for item in data
+        ],
+        "risk_distribution": risk_distribution,
+        "top_at_risk": [
+            {
+                "store_id": item["store_id"],
+                "product_id": item["product_id"],
+                "days_of_cover": item["days_of_cover"],
+                "risk_level": item["risk_level"],
+            }
+            for item in top_at_risk
+        ],
     }
 
 
@@ -203,6 +234,10 @@ def get_reorder_list() -> list[dict]:
                 "action": "CREATE_DRAFT_PO",
                 "auto_confirm_eligible": auto_confirm,
                 "status": "pending",
+                "last_reorder_date": None,
+                "current_stock": item["current_stock"],
+                "predicted_daily_demand": item["predicted_daily_demand"],
+                "days_of_cover": item["days_of_cover"],
             }
         )
 

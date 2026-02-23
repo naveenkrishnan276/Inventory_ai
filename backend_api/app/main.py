@@ -1,4 +1,5 @@
 from fastapi import Depends, FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import verify_api_token
 from .scheduler import configure_scheduler
@@ -27,6 +28,14 @@ from .state import ensure_state_files, read_retrain_status
 app = FastAPI(title="Inventory AI Backend", version="0.1.0")
 scheduler = None
 
+# Add CORS middleware to allow frontend communication
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Update with specific frontend URL if needed
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 def on_startup():
