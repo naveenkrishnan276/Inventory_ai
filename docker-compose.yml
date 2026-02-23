@@ -1,0 +1,34 @@
+services:
+  # Generates and broadcasts real-time retail sales events over TCP (:9999)
+  sales-stream:
+    # Lightweight Python runtime for the stream generator script
+    image: python:3.11-slim
+    container_name: inventory-sales-stream
+    # Project root inside the container
+    working_dir: /workspace
+    # Starts the TCP event producer
+    command: ["python", "data_stream/sales_stream.py"]
+    # Mount repo into container so code/data are shared live
+    volumes:
+      - ./:/workspace
+    # Use host network so script's localhost:9999 works unchanged
+    network_mode: host
+    # Auto-restart unless explicitly stopped by user
+    restart: unless-stopped
+
+  # Consumes the stream and performs windowed aggregations via PySpark
+  spark-windowed-aggregation:
+    # Official Spark runtime image
+    image: apache/spark:3.5.1
+    container_name: inventory-spark-windowed-aggregation
+    working_dir: /workspace
+    # Run via spark-submit so PySpark dependencies are available
+    command: ["/opt/spark/bin/spark-submit", "spark_jobs/windowed_aggregation.py"]
+    volumes:
+      - ./:/workspace
+    # Start producer service first
+    depends_on:
+      - sales-stream
+    # Share host network to reach stream on localhost:9999
+    network_mode: host
+    restart: unless-stopped

@@ -1,0 +1,12 @@
+store_id,product_id,seller_name,seller_contact,auto_confirm_eligible
+STORE_001,PROD_006,SouthMart Wholesale,+91-9000011111,false
+STORE_001,PROD_031,FreshLine Distributors,+91-9000011112,false
+STORE_001,PROD_050,DailyNeeds Supplier,+91-9000011113,true
+STORE_002,PROD_008,Metro Supply Co,+91-9000011114,false
+STORE_002,PROD_036,StapleHub Traders,+91-9000011115,true
+STORE_003,PROD_024,Prime Retail Source,+91-9000011116,false
+STORE_003,PROD_032,CityBulk Supply,+91-9000011117,false
+STORE_004,PROD_017,NorthZone Wholesale,+91-9000011118,true
+STORE_004,PROD_021,Urban Goods Partner,+91-9000011119,false
+STORE_005,PROD_017,HyperCart Vendors,+91-9000011120,true
+STORE_005,PROD_048,ValueStock Distributors,+91-9000011121,false
