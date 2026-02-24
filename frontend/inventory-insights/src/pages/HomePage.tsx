@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/dashboard/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, AlertTriangle, DollarSign, TrendingDown, Edit } from "lucide-react";
+import { Package, AlertTriangle, DollarSign, TrendingDown, Edit, IndianRupee } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
 const RISK_COLORS = { LOW: "#10b981", MEDIUM: "#f59e0b", HIGH: "#f97316", CRITICAL: "#ef4444" };
@@ -37,7 +37,7 @@ function HomeContent() {
       <div className="grid grid-cols-4 gap-4">
         <KpiCard title="Total Inventory" value={data?.total_inventory_units.toLocaleString() ?? "—"} icon={Package} loading={isLoading} />
         <KpiCard title="At-Risk Products" value={data?.at_risk_products ?? "—"} icon={AlertTriangle} loading={isLoading} />
-        <KpiCard title="Today's Revenue" value={data ? `$${data.today_sales_revenue.toLocaleString()}` : "—"} icon={DollarSign} loading={isLoading} />
+        <KpiCard title="Today's Revenue" value={data ? `₹${data.today_sales_revenue.toLocaleString()}` : "—"} icon={IndianRupee} loading={isLoading} />
         <KpiCard title="Stockout Risk" value={data ? `${data.stockout_risk_percent}%` : "—"} icon={TrendingDown} loading={isLoading} />
       </div>
 

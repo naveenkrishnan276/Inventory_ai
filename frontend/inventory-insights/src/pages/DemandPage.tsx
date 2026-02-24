@@ -98,8 +98,8 @@ function DemandContent() {
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip />
             <Legend />
-            <Line type="monotone" dataKey="predicted" stroke="hsl(222, 47%, 11%)" strokeWidth={2} dot={false} name="Predicted" />
-            <Line type="monotone" dataKey="actual" stroke="#10b981" strokeWidth={2} dot={false} name="Actual" connectNulls={false} />
+            <Line type="monotone" dataKey="predicted" stroke="hsl(222, 47%, 11%)" strokeWidth={2} dot={{ r: 4 }} name="Predicted" />
+            <Line type="monotone" dataKey="actual" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} name="Actual" connectNulls={true} />
           </LineChart>
         </ResponsiveContainer>
       </ChartCard>
