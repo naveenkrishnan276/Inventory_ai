@@ -79,12 +79,12 @@ try:
     # Use glob pattern to read only partition directories, avoid _spark_metadata
     parquet_pattern = f"{INPUT_PATH}/store_id=*/product_id=*"
     df = spark.read.parquet(parquet_pattern)
-    print(f"✓ Loaded data from: {parquet_pattern}")
-    print(f"✓ Total records: {df.count()}")
-    print(f"✓ Schema:")
+    print(f"Loaded data from: {parquet_pattern}")
+    print(f"Total records: {df.count()}")
+    print(f"Schema:")
     df.printSchema()
 except Exception as e:
-    print(f"✗ Error reading Parquet data: {e}")
+    print(f"Error reading Parquet data: {e}")
     print("\n  Troubleshooting:")
     print("  1. Ensure streaming job has been running for at least 5 minutes")
     print("  2. Check that output/retail_aggregations/store_id=*/product_id=*/ directories exist")
@@ -116,8 +116,8 @@ print("=" * 80)
 
 df_clean = df.dropna()
 rows_removed = df.count() - df_clean.count()
-print(f"✓ Rows removed: {rows_removed}")
-print(f"✓ Rows remaining: {df_clean.count()}")
+print(f"Rows removed: {rows_removed}")
+print(f"Rows remaining: {df_clean.count()}")
 
 # ---------------------------------------------------------------------------
 # Build ML Pipeline
@@ -151,10 +151,10 @@ rf = RandomForestRegressor(
 # Build pipeline (no StringIndexer needed)
 pipeline = Pipeline(stages=[vector_assembler, rf])
 
-print(f"✓ Pipeline stages: {len(pipeline.getStages())}")
+print(f"Pipeline stages: {len(pipeline.getStages())}")
 for i, stage in enumerate(pipeline.getStages(), 1):
     print(f"  {i}. {stage.__class__.__name__}")
-print(f"✓ Features used: {FEATURE_COLUMNS}")
+print(f"Features used: {FEATURE_COLUMNS}")
 
 # ---------------------------------------------------------------------------
 # Train/Test Split
@@ -164,8 +164,8 @@ print("Train/Test Split (80/20)...")
 print("=" * 80)
 
 train_df, test_df = df_clean.randomSplit([0.8, 0.2], seed=42)
-print(f"✓ Training set records: {train_df.count()}")
-print(f"✓ Test set records: {test_df.count()}")
+print(f"Training set records: {train_df.count()}")
+print(f"Test set records: {test_df.count()}")
 
 # ---------------------------------------------------------------------------
 # Train the model
@@ -175,7 +175,7 @@ print("Training Random Forest Model...")
 print("=" * 80)
 
 model = pipeline.fit(train_df)
-print("✓ Model training completed")
+print("Model training completed")
 
 # ---------------------------------------------------------------------------
 # Make predictions on test set
@@ -208,7 +208,7 @@ rmse_evaluator = RegressionEvaluator(
     metricName="rmse"
 )
 rmse = rmse_evaluator.evaluate(predictions)
-print(f"✓ RMSE (Root Mean Squared Error): {rmse:.4f}")
+print(f"RMSE (Root Mean Squared Error): {rmse:.4f}")
 
 # MAE (Mean Absolute Error)
 mae_evaluator = RegressionEvaluator(
@@ -217,7 +217,7 @@ mae_evaluator = RegressionEvaluator(
     metricName="mae"
 )
 mae = mae_evaluator.evaluate(predictions)
-print(f"✓ MAE (Mean Absolute Error): {mae:.4f}")
+print(f"MAE (Mean Absolute Error): {mae:.4f}")
 
 # R² (Coefficient of Determination)
 r2_evaluator = RegressionEvaluator(
@@ -226,7 +226,7 @@ r2_evaluator = RegressionEvaluator(
     metricName="r2"
 )
 r2 = r2_evaluator.evaluate(predictions)
-print(f"✓ R² (Coefficient of Determination): {r2:.4f}")
+print(f"R2 (Coefficient of Determination): {r2:.4f}")
 
 # ---------------------------------------------------------------------------
 # Extract and display feature importance
@@ -270,7 +270,7 @@ if os.path.exists(MODEL_OUTPUT_PATH):
 
 # Save the pipeline model (includes preprocessing and RF model)
 model.write().overwrite().save(MODEL_OUTPUT_PATH)
-print(f"✓ Model saved to: {MODEL_OUTPUT_PATH}")
+print(f"Model saved to: {MODEL_OUTPUT_PATH}")
 
 # ---------------------------------------------------------------------------
 # Model Summary and Statistics
@@ -303,5 +303,5 @@ print("  predictions = model.transform(new_data)")
 print("")
 
 spark.stop()
-print("✓ Spark session closed")
+print("Spark session closed")
 print("=" * 80)
