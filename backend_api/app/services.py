@@ -3,6 +3,7 @@ import hashlib
 import re
 import subprocess
 import threading
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -296,7 +297,7 @@ def run_retrain_job() -> None:
         write_retrain_status(state)
 
         completed = subprocess.run(
-            ["python3", str(TRAIN_SCRIPT)],
+            [sys.executable, str(TRAIN_SCRIPT)],
             cwd=str(ROOT),
             capture_output=True,
             text=True,
@@ -307,6 +308,11 @@ def run_retrain_job() -> None:
         stdout = completed.stdout or ""
         stderr = completed.stderr or ""
         combined = f"{stdout}\n{stderr}"
+
+        # Log output for debugging
+        print("=== Retrain subprocess output ===")
+        print(combined)
+        print("=== End retrain output ===")
 
         if completed.returncode == 0:
             rmse = _extract_metric(combined, "RMSE")
@@ -329,6 +335,7 @@ def run_retrain_job() -> None:
                     "model_version": previous.get("model_version", "demand_rf_model_current"),
                     "rmse": previous.get("rmse"),
                     "r2": previous.get("r2"),
+                    "error": combined,
                 }
             )
     except subprocess.TimeoutExpired:
@@ -340,12 +347,11 @@ def run_retrain_job() -> None:
                 "model_version": previous.get("model_version", "demand_rf_model_current"),
                 "rmse": previous.get("rmse"),
                 "r2": previous.get("r2"),
+                "error": "Timeout expired",
             }
         )
     finally:
         RETRAIN_LOCK.release()
-
-
 def trigger_retrain_async() -> bool:
     if RETRAIN_LOCK.locked():
         return False
