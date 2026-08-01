@@ -1,7 +1,7 @@
 {
   "status": "success",
-  "last_run": "2026-02-24T09:13:55.823540+00:00",
-  "model_version": "demand_rf_model_20260224_091355",
-  "rmse": 2.5852,
-  "r2": 0.9558
+  "last_run": "2026-07-06T15:53:52.772702+00:00",
+  "model_version": "demand_rf_model_20260706_155352",
+  "rmse": 0.3838,
+  "r2": 0.9969
 }

@@ -2,3 +2,6 @@ fastapi==0.116.1
 uvicorn[standard]==0.35.0
 apscheduler==3.11.0
 python-dotenv==1.1.1
+pandas==3.0.3
+pyarrow==24.0.0
+pyspark==3.5.0

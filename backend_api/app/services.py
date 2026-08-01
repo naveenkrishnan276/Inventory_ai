@@ -17,12 +17,55 @@ TRAIN_SCRIPT = ROOT / "spark_jobs" / "demand_prediction_rf.py"
 
 RETRAIN_LOCK = threading.Lock()
 
+# --- NEW LOGIC: PYSPARK INTEGRATION ---
+import pandas as pd
+from pyspark.sql import SparkSession
+from pyspark.ml import PipelineModel
+from pyspark.sql.functions import max as sql_max, lit
 
-def _stable_float(key: str, min_val: float, max_val: float) -> float:
-    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
-    value = int(digest[:8], 16) / 0xFFFFFFFF
-    return min_val + (max_val - min_val) * value
+_spark_session = None
+_rf_model = None
+_spark_lock = threading.Lock()
 
+def _get_spark():
+    global _spark_session, _rf_model
+    if _spark_session is None:
+        with _spark_lock:
+            if _spark_session is None:
+                try:
+                    import os, sys
+                    HADOOP_HOME = str(ROOT / "hadoop")
+                    os.environ["HADOOP_HOME"] = HADOOP_HOME
+                    os.environ["hadoop.home.dir"] = HADOOP_HOME
+                    os.environ["PATH"] = os.path.join(HADOOP_HOME, "bin") + os.pathsep + os.environ.get("PATH", "")
+                    os.environ["PYSPARK_PYTHON"] = sys.executable
+                    os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
+                    os.environ["PYSPARK_PIN_THREAD"] = "true"
+                except Exception:
+                    pass
+                
+                _spark_session = (
+                    SparkSession.builder
+                    .appName("FastAPIBackend")
+                    .master("local[*]")
+                    .config("spark.sql.shuffle.partitions", "1")
+                    .config("spark.driver.port", "50123")
+                    .config("spark.blockManager.port", "50124")
+                    .config("spark.ui.port", "4041")
+                    .config("spark.python.worker.reuse", "true")
+                    .config("spark.python.use.daemon", "false")
+                    .config("spark.sql.execution.arrow.pyspark.enabled", "false")
+                    .getOrCreate()
+                )
+                _spark_session.sparkContext.setLogLevel("WARN")
+                
+                model_path = str(ROOT / "models" / "demand_rf_model")
+                try:
+                    _rf_model = PipelineModel.load(model_path)
+                except Exception as e:
+                    print(f"Failed to load RF model: {e}")
+                    _rf_model = None
+    return _spark_session, _rf_model
 
 def _load_inventory() -> list[dict]:
     rows: list[dict] = []
@@ -39,7 +82,6 @@ def _load_inventory() -> list[dict]:
             )
     return rows
 
-
 def _load_sellers() -> dict[tuple[str, str], dict]:
     if not SELLER_PATH.exists():
         return {}
@@ -51,56 +93,129 @@ def _load_sellers() -> dict[tuple[str, str], dict]:
             sellers[(row["store_id"], row["product_id"])] = row
     return sellers
 
-
-def _predicted_daily_demand(store_id: str, product_id: str) -> float:
-    return round(_stable_float(f"{store_id}:{product_id}:demand", 20.0, 180.0), 2)
-
-
-def _actual_daily_sales(store_id: str, product_id: str, predicted: float) -> float:
-    factor = _stable_float(f"{store_id}:{product_id}:actual", 0.75, 1.1)
-    return round(predicted * factor, 2)
-
-
-def _risk_level(days_of_cover: float) -> str:
-    if days_of_cover <= 1:
-        return "CRITICAL"
-    if days_of_cover <= 2:
-        return "HIGH"
-    if days_of_cover <= 4:
-        return "MEDIUM"
-    return "LOW"
-
-
-def _reorder_quantity(stock: int, lead_time_days: int, predicted_daily_demand: float) -> int:
-    buffer_days = 2
-    target_stock = int((lead_time_days + buffer_days) * predicted_daily_demand)
-    return max(0, target_stock - stock)
-
-
 def compute_inventory_rows() -> list[dict]:
     rows = _load_inventory()
-    enriched: list[dict] = []
-
-    for row in rows:
-        predicted = _predicted_daily_demand(row["store_id"], row["product_id"])
-        actual = _actual_daily_sales(row["store_id"], row["product_id"], predicted)
-        days_of_cover = round(row["current_stock"] / max(predicted, 1), 2)
-        risk_level = _risk_level(days_of_cover)
-        reorder_qty = _reorder_quantity(row["current_stock"], row["lead_time_days"], predicted)
-
-        enriched.append(
-            {
-                **row,
-                "predicted_daily_demand": predicted,
-                "actual_sales": actual,
-                "days_of_cover": days_of_cover,
-                "risk_level": risk_level,
-                "recommended_reorder_quantity": reorder_qty,
+    RETAIL_AGGREGATIONS_PATH = ROOT / "output" / "retail_aggregations"
+    
+    import pandas as pd
+    import os
+    
+    try:
+        # Read the entire Hive-partitioned Parquet dataset in a single call.
+        # Pandas + pyarrow handles store_id=X/product_id=Y partitioning
+        # natively, which is orders of magnitude faster than reading each
+        # of the thousands of small files individually.
+        if RETAIL_AGGREGATIONS_PATH.exists():
+            demand_df = pd.read_parquet(
+                str(RETAIL_AGGREGATIONS_PATH),
+                engine="pyarrow",
+            )
+        else:
+            demand_df = pd.DataFrame()
+        
+        if not demand_df.empty:
+            agg_cols = {
+                'total_units_sold': 'max',
+                'total_revenue': 'max',
+                'avg_units_per_minute': 'max',
+                'transaction_count': 'max'
             }
-        )
+            if 'prediction' in demand_df.columns:
+                agg_cols['prediction'] = 'max'
+                
+            demand_agg = demand_df.groupby(['store_id', 'product_id']).agg(agg_cols).reset_index()
+            
+            inventory_df = pd.DataFrame(rows)
+            joined_df = pd.merge(inventory_df, demand_agg, on=['store_id', 'product_id'], how='left')
+            
+            import joblib
+            
+            MODEL_PATH = ROOT / "models" / "demand_rf_model.joblib"
+            
+            fill_cols = {
+                'total_units_sold': 0, 'total_revenue': 0.0, 
+                'avg_units_per_minute': 0.0, 'transaction_count': 0
+            }
+            joined_df.fillna(fill_cols, inplace=True)
+            
+            features = ['total_units_sold', 'total_revenue', 'avg_units_per_minute', 'transaction_count']
+            
+            if os.path.exists(MODEL_PATH):
+                try:
+                    rf_model = joblib.load(MODEL_PATH)
+                    joined_df['prediction'] = rf_model.predict(joined_df[features])
+                except Exception as e:
+                    print(f"Failed to load/predict with Scikit-Learn model: {e}")
+                    joined_df['prediction'] = 0.0
+            else:
+                joined_df['prediction'] = 0.0
+                
+            results = joined_df.to_dict('records')
+        else:
+            results = [dict(**r, total_units_sold=0, avg_units_per_minute=0, transaction_count=0, prediction=0.0) for r in rows]
+            
+    except Exception as e:
+        print(f"Error computing real inventory rows: {e}")
+        results = [dict(**r, total_units_sold=0, avg_units_per_minute=0, transaction_count=0, prediction=0.0) for r in rows]
+
+    enriched = []
+    for item in results:
+        if hasattr(item, 'asDict'):
+            row_dict = item.asDict()
+        else:
+            row_dict = item
+            
+        current_stock = int(row_dict.get("current_stock", 0))
+        lead_time_days = int(row_dict.get("lead_time_days", 0))
+        
+        # ML model prediction (5-min window → daily: ×288)
+        model_pred = round(float(row_dict.get("prediction", 0.0)) * 288.0, 2)
+        model_pred = max(0.0, model_pred)
+        
+        # Streaming data metrics from aggregated Parquet
+        actual_units = round(float(row_dict.get("total_units_sold", 0)), 2)
+        avg_per_min = float(row_dict.get("avg_units_per_minute", 0))
+        txn_count = float(row_dict.get("transaction_count", 0))
+        
+        # Estimate daily demand from streaming data:
+        # avg_units_per_minute is already a rate → daily = rate × 60min × 24hr
+        streaming_daily = round(avg_per_min * 60.0 * 24.0, 2)
+        
+        # Use the HIGHER of: model prediction OR streaming estimate
+        # This ensures meaningful risk levels even when model predictions are low
+        predicted = max(model_pred, streaming_daily)
+        
+        # Days of cover = how many days current stock can sustain the demand
+        days_of_cover = round(current_stock / max(predicted, 1), 2)
+        
+        # 4-tier risk classification based on days of cover
+        if days_of_cover <= 1:
+            risk_level = "CRITICAL"
+        elif days_of_cover <= 2:
+            risk_level = "HIGH"
+        elif days_of_cover <= 4:
+            risk_level = "MEDIUM"
+        else:
+            risk_level = "LOW"
+            
+        # Reorder quantity: enough to cover lead_time + buffer at predicted demand rate
+        buffer_days = 2
+        target_stock = int((lead_time_days + buffer_days) * predicted)
+        reorder_qty = max(0, target_stock - current_stock)
+
+        enriched.append({
+            "store_id": row_dict["store_id"],
+            "product_id": row_dict["product_id"],
+            "current_stock": current_stock,
+            "lead_time_days": lead_time_days,
+            "predicted_daily_demand": predicted,
+            "actual_sales": actual_units,
+            "days_of_cover": days_of_cover,
+            "risk_level": risk_level,
+            "recommended_reorder_quantity": reorder_qty,
+        })
 
     return enriched
-
 
 def get_home_summary() -> dict:
     data = compute_inventory_rows()

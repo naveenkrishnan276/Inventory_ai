@@ -16,6 +16,8 @@ Features:
 """
 
 import os
+import shutil
+import sys
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -40,6 +42,17 @@ from pyspark.sql.functions import (
 # ---------------------------------------------------------------------------
 CHECKPOINT_DIR = str(Path(__file__).resolve().parent.parent / "checkpoints" / "retail_streaming")
 OUTPUT_DIR = str(Path(__file__).resolve().parent.parent / "output" / "retail_aggregations")
+
+# ---------------------------------------------------------------------------
+# Clear stale checkpoints from previous runs.
+# The socket source is in-memory only — it does NOT support recovery.
+# Leftover checkpoints cause Spark to commit at offsets that no longer
+# exist in the (empty) socket buffer, triggering:
+#   java.lang.IndexOutOfBoundsException: at 0 deleting N
+# ---------------------------------------------------------------------------
+if os.path.exists(CHECKPOINT_DIR):
+    print(f"Clearing stale checkpoint directory: {CHECKPOINT_DIR}")
+    shutil.rmtree(CHECKPOINT_DIR, ignore_errors=True)
 
 # ---------------------------------------------------------------------------
 # Schema matching the events produced by sales_stream.py
@@ -102,18 +115,18 @@ valid_stream = parsed_stream.filter(
 # Watermarking allows the system to track late-arriving data and
 # automatically drop events that are too old
 # ---------------------------------------------------------------------------
-watermarked_stream = valid_stream.withWatermark("event_time", "10 minutes")
+watermarked_stream = valid_stream.withWatermark("event_time", "5 seconds")
 
 # ---------------------------------------------------------------------------
-# Perform sliding window aggregation:
-# - Window duration: 5 minutes
-# - Slide duration: 1 minute
+# Perform sliding window aggregation (Accelerated for Demo):
+# - Window duration: 30 seconds
+# - Slide duration: 10 seconds
 # - Group by: window, store_id, product_id
 # ---------------------------------------------------------------------------
 windowed_agg = (
     watermarked_stream
     .groupBy(
-        window(col("event_time"), "5 minutes", "1 minute"),
+        window(col("event_time"), "30 seconds", "10 seconds"),
         col("store_id"),
         col("product_id"),
     )
@@ -122,7 +135,7 @@ windowed_agg = (
         _round(_sum(col("quantity") * col("unit_price")), 2).alias("total_revenue"),
         count("*").alias("transaction_count"),
     )
-    .withColumn("avg_units_per_minute", _round(col("total_units_sold") / 5, 2))
+    .withColumn("avg_units_per_minute", _round(col("total_units_sold") * 2, 2))
 )
 
 # ---------------------------------------------------------------------------

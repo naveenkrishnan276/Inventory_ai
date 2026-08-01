@@ -57,12 +57,12 @@ def health():
 
 
 @app.get("/api/home/summary", response_model=HomeSummary)
-def home_summary(_: None = Depends(verify_api_token)):
+async def home_summary(_: None = Depends(verify_api_token)):
     return get_home_summary()
 
 
 @app.get("/api/demand/predictions", response_model=DemandPredictionsResponse)
-def demand_predictions(
+async def demand_predictions(
     limit: int = Query(default=200, ge=1, le=2000),
     _: None = Depends(verify_api_token),
 ):
@@ -70,7 +70,7 @@ def demand_predictions(
 
 
 @app.post("/api/demand/retrain", response_model=RetrainResponse)
-def demand_retrain(_: None = Depends(verify_api_token)):
+async def demand_retrain(_: None = Depends(verify_api_token)):
     started = trigger_retrain_async()
     if not started:
         return {"status": "running", "message": "Retraining already in progress"}
@@ -78,12 +78,12 @@ def demand_retrain(_: None = Depends(verify_api_token)):
 
 
 @app.get("/api/demand/retrain-status", response_model=RetrainStatus)
-def demand_retrain_status(_: None = Depends(verify_api_token)):
+async def demand_retrain_status(_: None = Depends(verify_api_token)):
     return read_retrain_status()
 
 
 @app.get("/api/analytics/trends", response_model=AnalyticsResponse)
-def analytics_trends(
+async def analytics_trends(
     range_days: int = Query(default=7, ge=3, le=30),
     _: None = Depends(verify_api_token),
 ):
@@ -91,12 +91,12 @@ def analytics_trends(
 
 
 @app.get("/api/reorder/list", response_model=ReorderListResponse)
-def reorder_list(_: None = Depends(verify_api_token)):
+async def reorder_list(_: None = Depends(verify_api_token)):
     return {"rows": get_reorder_list()}
 
 
 @app.post("/api/inventory/update-stock", response_model=UpdateStockResponse)
-def inventory_update_stock(request: UpdateStockRequest, _: None = Depends(verify_api_token)):
+async def inventory_update_stock(request: UpdateStockRequest, _: None = Depends(verify_api_token)):
     existed = update_inventory_stock(
         store_id=request.store_id,
         product_id=request.product_id,

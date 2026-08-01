@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-HOST = "localhost"
+HOST = "0.0.0.0"
 PORT = 9999
 
 STORE_IDS = [f"STORE_{i:03d}" for i in range(1, 6)]

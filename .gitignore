@@ -1,0 +1,7 @@
+output
+checkpoints
+retail_streaming
+
+
+# Gamma prompt drafts
+gamma_ppt_prompt_5min*.md
