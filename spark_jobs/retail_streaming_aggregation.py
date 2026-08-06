@@ -77,6 +77,7 @@ spark = (
     .master("local[*]")
     .config("spark.sql.streaming.schemaInference", "false")
     .config("spark.sql.shuffle.partitions", "4")
+    .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4")
     .config("spark.hadoop.fs.s3a.aws.credentials.provider", "com.amazonaws.auth.InstanceProfileCredentialsProvider,com.amazonaws.auth.DefaultAWSCredentialsProviderChain")
     .getOrCreate()
 )
