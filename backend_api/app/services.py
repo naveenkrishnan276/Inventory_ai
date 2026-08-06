@@ -95,7 +95,7 @@ def _load_sellers() -> dict[tuple[str, str], dict]:
 
 def compute_inventory_rows() -> list[dict]:
     rows = _load_inventory()
-    RETAIL_AGGREGATIONS_PATH = ROOT / "output" / "retail_aggregations"
+    RETAIL_AGGREGATIONS_PATH = "s3://inventory-ai-data-nkr/retail_aggregations"
     
     import pandas as pd
     import os
@@ -129,8 +129,10 @@ def compute_inventory_rows() -> list[dict]:
             joined_df = pd.merge(inventory_df, demand_agg, on=['store_id', 'product_id'], how='left')
             
             import joblib
+            import boto3
+            import tempfile
             
-            MODEL_PATH = ROOT / "models" / "demand_rf_model.joblib"
+            MODEL_PATH = "s3://inventory-ai-models-nkr/demand_rf_model.joblib"
             
             fill_cols = {
                 'total_units_sold': 0, 'total_revenue': 0.0, 
@@ -140,14 +142,26 @@ def compute_inventory_rows() -> list[dict]:
             
             features = ['total_units_sold', 'total_revenue', 'avg_units_per_minute', 'transaction_count']
             
-            if os.path.exists(MODEL_PATH):
+            try:
+                s3 = boto3.client("s3")
+                bucket_name = MODEL_PATH.replace("s3://", "").split("/")[0]
+                object_name = "/".join(MODEL_PATH.replace("s3://", "").split("/")[1:])
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".joblib") as tmp:
+                    temp_path = tmp.name
+                
+                # Check if object exists before downloading
                 try:
-                    rf_model = joblib.load(MODEL_PATH)
+                    s3.head_object(Bucket=bucket_name, Key=object_name)
+                    s3.download_file(bucket_name, object_name, temp_path)
+                    rf_model = joblib.load(temp_path)
                     joined_df['prediction'] = rf_model.predict(joined_df[features])
+                    os.remove(temp_path)
                 except Exception as e:
-                    print(f"Failed to load/predict with Scikit-Learn model: {e}")
+                    # Model not found or error loading
                     joined_df['prediction'] = 0.0
-            else:
+            except Exception as e:
+                print(f"Failed to load/predict with Scikit-Learn model from S3: {e}")
                 joined_df['prediction'] = 0.0
                 
             results = joined_df.to_dict('records')

@@ -24,13 +24,16 @@ from pathlib import Path
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
+import s3fs
+import boto3
+import tempfile
 import joblib
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-INPUT_PATH = Path(__file__).resolve().parent.parent / "output" / "retail_aggregations"
-MODEL_OUTPUT_PATH = Path(__file__).resolve().parent.parent / "models" / "demand_rf_model.joblib"
+INPUT_PATH = "s3://inventory-ai-data-nkr/retail_aggregations"
+MODEL_OUTPUT_PATH = "s3://inventory-ai-models-nkr/demand_rf_model.joblib"
 
 FEATURE_COLUMNS = [
     "total_units_sold",
@@ -44,28 +47,15 @@ LABEL_COLUMN = "total_units_sold"
 # Read aggregated streaming data from Parquet
 # ---------------------------------------------------------------------------
 print("=" * 80)
-print("Reading aggregated data from Parquet...")
+print("Reading aggregated data from Parquet in S3...")
 print("=" * 80)
 
-all_files = glob.glob(str(INPUT_PATH / "**" / "*.parquet"), recursive=True)
-if not all_files:
-    print(f"No parquet files found in {INPUT_PATH}")
+try:
+    df = pd.read_parquet(INPUT_PATH, engine="pyarrow")
+except Exception as e:
+    print(f"Failed to read parquet from S3 {INPUT_PATH}: {e}")
     print("Ensure streaming job has been running and produced output.")
     exit(1)
-
-dfs = []
-for f in all_files:
-    try:
-        df = pd.read_parquet(f)
-        dfs.append(df)
-    except Exception as e:
-        print(f"Skipping bad parquet file {f}: {e}")
-
-if not dfs:
-    print("Failed to read any data.")
-    exit(1)
-
-df = pd.concat(dfs, ignore_index=True)
 print(f"Loaded {len(df)} records.")
 
 # Clean data
@@ -102,7 +92,16 @@ print("\nFeature Importances:")
 for f, imp in importances:
     print(f"  {f}: {imp:.4f}")
 
-# Save Model
-os.makedirs(MODEL_OUTPUT_PATH.parent, exist_ok=True)
-joblib.dump(rf, MODEL_OUTPUT_PATH)
+# Save Model to local temp, then upload to S3
+with tempfile.NamedTemporaryFile(delete=False, suffix=".joblib") as tmp:
+    temp_path = tmp.name
+joblib.dump(rf, temp_path)
+
+print("\nUploading model to S3...")
+s3 = boto3.client("s3")
+bucket_name = MODEL_OUTPUT_PATH.replace("s3://", "").split("/")[0]
+object_name = "/".join(MODEL_OUTPUT_PATH.replace("s3://", "").split("/")[1:])
+s3.upload_file(temp_path, bucket_name, object_name)
+os.remove(temp_path)
+
 print(f"\nModel saved to {MODEL_OUTPUT_PATH}")

@@ -40,8 +40,8 @@ from pyspark.sql.functions import (
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-CHECKPOINT_DIR = str(Path(__file__).resolve().parent.parent / "checkpoints" / "retail_streaming")
-OUTPUT_DIR = str(Path(__file__).resolve().parent.parent / "output" / "retail_aggregations")
+CHECKPOINT_DIR = "s3a://inventory-ai-data-nkr/checkpoints/retail_streaming"
+OUTPUT_DIR = "s3a://inventory-ai-data-nkr/retail_aggregations"
 
 # ---------------------------------------------------------------------------
 # Clear stale checkpoints from previous runs.
@@ -50,9 +50,9 @@ OUTPUT_DIR = str(Path(__file__).resolve().parent.parent / "output" / "retail_agg
 # exist in the (empty) socket buffer, triggering:
 #   java.lang.IndexOutOfBoundsException: at 0 deleting N
 # ---------------------------------------------------------------------------
-if os.path.exists(CHECKPOINT_DIR):
-    print(f"Clearing stale checkpoint directory: {CHECKPOINT_DIR}")
-    shutil.rmtree(CHECKPOINT_DIR, ignore_errors=True)
+# Note: Since checkpoints are now on S3, you must manually delete the S3 folder
+# before restarting the socket stream to avoid stale state issues.
+print(f"IMPORTANT: Ensure you deleted stale checkpoints from S3 if restarting the stream!")
 
 # ---------------------------------------------------------------------------
 # Schema matching the events produced by sales_stream.py
@@ -77,6 +77,7 @@ spark = (
     .master("local[*]")
     .config("spark.sql.streaming.schemaInference", "false")
     .config("spark.sql.shuffle.partitions", "4")
+    .config("spark.hadoop.fs.s3a.aws.credentials.provider", "com.amazonaws.auth.InstanceProfileCredentialsProvider,com.amazonaws.auth.DefaultAWSCredentialsProviderChain")
     .getOrCreate()
 )
 
